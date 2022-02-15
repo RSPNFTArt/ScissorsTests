@@ -1,10 +1,15 @@
+# 
+# (c) 2022, rpsnft.art
+#
+
 import pytest
 import brownie
 
 from decimal import *
-from brownie import network, Scissors, Wei 
-from scripts.helpful_scripts import get_account
-from scripts.helpful_tests import create_contract,init_presales,finish_presales, whitelist, setMaxDrop
+from brownie import network, Scissors, Wei
+from scripts.helpful_scripts import get_account, amount_in_wei
+from scripts.helpful_tests import create_contract,init_presales,finish_presales, whitelist, setMaxDrop,\
+    PRESALES_MINT_PRICE,PUBSALES_MINT_PRICE,PRESALES_FLOAT_VAL,PUBSALES_FLOAT_VAL
 
 # Set the test environment at module level for all tests below
 @pytest.fixture(scope="module", autouse=True)
@@ -32,11 +37,11 @@ def test_can_mint_scissor_public_sales(contract):
     # get balance
     last_balance = contract.balance()
 
-    contract.mint(1,{'from': get_account(1), 'value': Wei("0.055 ether")})
+    contract.mint(1,{'from': get_account(1), 'value': amount_in_wei(PUBSALES_FLOAT_VAL)})
     
     assert contract.totalSupply() == (supply + 1)
     assert contract.ownerOf(1) == get_account(1)
-    assert contract.balance() == last_balance + Wei("0.055 ether")
+    assert contract.balance() == last_balance + amount_in_wei(PUBSALES_FLOAT_VAL)
 
     # get last id generated and validate filename
     tokenId = contract.totalSupply()
@@ -59,10 +64,10 @@ def test_can_do_mint_during_presales(contract):
     supply = contract.totalSupply()
     last_balance = contract.balance()
     
-    contract.preSalesMint(1,{'from': get_account(2), 'value': Wei("0.055 ether")})
+    contract.preSalesMint(1,{'from': get_account(2), 'value': amount_in_wei(PRESALES_FLOAT_VAL)})
 
     assert contract.totalSupply() == supply + 1
-    assert contract.balance() == last_balance + Wei("0.055 ether")
+    assert contract.balance() == last_balance + amount_in_wei(PRESALES_FLOAT_VAL)
     assert (contract.ownerOf(1) == get_account(2))
 
 #@pytest.mark.skip(reason="focus") 

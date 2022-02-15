@@ -1,7 +1,15 @@
+from cmath import phase
+from turtle import pu
 import pytest
 import brownie
 from brownie import Wei,convert,accounts,config,network,Scissors
-from scripts.helpful_scripts import get_account,amount_in_eths,account_in_eths,eths_r_equal
+from scripts.helpful_scripts import get_account,amount_in_eths,account_in_eths,eths_r_equal,amount_in_wei
+
+PRESALES_FLOAT_VAL = 0.055
+PUBSALES_FLOAT_VAL = 0.070
+
+PRESALES_MINT_PRICE = "0.055 ether"
+PUBSALES_MINT_PRICE = "0.070 ether"
 
 def create_contract():
     scissor = Scissors.deploy({"from": get_account(0)})    
@@ -225,15 +233,15 @@ def complete_e2e_test(contract,_range_390,_range_24,_range_10,_maxPreSales,_maxD
     th_balance = contract.reservedTHPrize()
 
     # presales is just 10 (not yet 25%)
-    contract.preSalesMint(2,{'from': get_account(3), 'value': Wei("0.110 ether")})
-    contract.preSalesMint(2,{'from': get_account(4), 'value': Wei("0.110 ether")})
-    contract.preSalesMint(2,{'from': get_account(8), 'value': Wei("0.110 ether")})
-    contract.preSalesMint(2,{'from': get_account(9), 'value': Wei("0.110 ether")})
-    contract.preSalesMint(2,{'from': get_account(10), 'value': Wei("0.110 ether")})
+    contract.preSalesMint(2,{'from': get_account(3), 'value': amount_in_wei(PRESALES_FLOAT_VAL*2)})
+    contract.preSalesMint(2,{'from': get_account(4), 'value': amount_in_wei(PRESALES_FLOAT_VAL*2)})
+    contract.preSalesMint(2,{'from': get_account(8), 'value': amount_in_wei(PRESALES_FLOAT_VAL*2)})
+    contract.preSalesMint(2,{'from': get_account(9), 'value': amount_in_wei(PRESALES_FLOAT_VAL*2)})
+    contract.preSalesMint(2,{'from': get_account(10), 'value': amount_in_wei(PRESALES_FLOAT_VAL*2)})
 
     # TH balance should be the same as we have not pass the 25% of max (5 = 20/4)
     assert th_balance == 0
-    assert contract.balance() == last_balance + Wei('0.55 ether')
+    assert contract.balance() == last_balance + amount_in_wei(PRESALES_FLOAT_VAL*10)
     
     finish_presales(contract)
 
@@ -252,19 +260,19 @@ def complete_e2e_test(contract,_range_390,_range_24,_range_10,_maxPreSales,_maxD
     # We have pre-minted 10 , remaining 
     # Let's now mint up to 100% (390 times 5 each account)
     for i in range(_range_390): 
-        contract.mint(5,{'from': get_account(3), 'value': Wei("0.275 ether")})
-        contract.mint(5,{'from': get_account(4), 'value': Wei("0.275 ether")})
-        contract.mint(5,{'from': get_account(8), 'value': Wei("0.275 ether")})
-        contract.mint(5,{'from': get_account(9), 'value': Wei("0.275 ether")})
-        contract.mint(5,{'from': get_account(10), 'value': Wei("0.275 ether")})
+        contract.mint(5,{'from': get_account(3), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*5)})
+        contract.mint(5,{'from': get_account(4), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*5)})
+        contract.mint(5,{'from': get_account(8), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*5)})
+        contract.mint(5,{'from': get_account(9), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*5)})
+        contract.mint(5,{'from': get_account(10), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*5)})
 
     # 390 veces 25 es 9750, que a los 10 de presales nos da 9760, quedan 240 (-150 de whitelist)
     # para llegar a 10K
-    _cost_range_10=_range_10*0.055
+    _cost_range_10=_range_10*PUBSALES_FLOAT_VAL
     
     # restamos 15 porque vamos de 10 en 10
     for i in range(_range_24):
-        contract.mint(_range_10,{'from': get_account(10), 'value': Wei(f"{_cost_range_10} ether")})
+        contract.mint(_range_10,{'from': get_account(10), 'value': amount_in_wei(_cost_range_10)})
     
     print(f"TotalSupply = {contract.totalSupply()} and _maxDrop = {_maxDrop}")
 
@@ -273,7 +281,7 @@ def complete_e2e_test(contract,_range_390,_range_24,_range_10,_maxPreSales,_maxD
     
     # let's try just an additional one to get SOLD OUT message  
     with brownie.reverts("dev: SOLD OUT!"):
-        contract.mint(1,{'from': get_account(11), 'value': Wei("0.055 ether")})
+        contract.mint(1,{'from': get_account(11), 'value': amount_in_wei(PUBSALES_FLOAT_VAL)})
 
     # refresh supply for next assert
     supply = contract.totalSupply()
@@ -283,7 +291,7 @@ def complete_e2e_test(contract,_range_390,_range_24,_range_10,_maxPreSales,_maxD
     exp = Wei(f"{_expected_total_eths} ether") - Wei("9 ether")
     
     # Confirm contract balance
-    # 550 ETH (0.055 * 10K) - 50 ETH from treasure hunt pot - 9 ETH from 1st+2nd prize (4+5)
+    # expected amount (exp) - 50 ETH from treasure hunt pot - 9 ETH from 1st+2nd prize (4+5)
     assert contract.balance() == last_balance + exp
     
     # Assign new last_balance for contract
@@ -646,13 +654,16 @@ def pct_at_25(contract,max):
     assert supply == 0
 
     init_presales(contract)
-
+    
      # add test accounts to the pre-sale list
     contract.addToPresalesList([get_account(5),get_account(6)],{'from': get_account(0)})
     
     # presales is just 3 (not yet 25%)
-    contract.preSalesMint(2,{'from': get_account(6), 'value': Wei("0.110 ether")})
-    contract.preSalesMint(1,{'from': get_account(5), 'value': Wei("0.055 ether")})
+    contract.preSalesMint(2,{'from': get_account(6), 'value': amount_in_wei(PRESALES_FLOAT_VAL*2)})
+    contract.preSalesMint(1,{'from': get_account(5), 'value': amount_in_wei(PRESALES_FLOAT_VAL)})
+    
+    presales_in_contract = amount_in_wei(PRESALES_FLOAT_VAL*3)
+    assert contract.balance() == last_balance + presales_in_contract
 
     # TH balance should be the same as we have not pass the 25% of max (5 = 20/4)
     assert contract.reservedTHPrize() == th_balance 
@@ -661,11 +672,13 @@ def pct_at_25(contract,max):
     finish_presales(contract)
 
     amount_to_mint = (max/4) - 3
-    price = amount_to_mint * 0.055
+    price = amount_to_mint * PUBSALES_FLOAT_VAL
+    
+    pubsales_in_contract = amount_in_wei(price)
 
     # Let's now mint up to 25% (up to max/4) 
-    contract.mint(amount_to_mint,{'from': get_account(3), 'value': Wei(f"{price} ether")})
-
+    contract.mint(amount_to_mint,{'from': get_account(3), 'value': amount_in_wei(price)})
+    
     # Let's keep to check variance in supply
     supply = contract.totalSupply()
 
@@ -676,14 +689,10 @@ def pct_at_25(contract,max):
     assert contract.reservedTHPrize() == th_balance + Wei("5 ether")        
 
     # no prizes yet
-    no_1st_n_2nd_prizes_yet(first_prize_acct_balance, second_prize_acct_balance)
-
-    # Calc 25% price
-    amount_to_mint = (max/4)
-    price = amount_to_mint * 0.055
-
+    no_1st_n_2nd_prizes_yet(first_prize_acct_balance, second_prize_acct_balance)    
+    
     # In 25% the contract is still keeping 4 ethers of 1st price until 50% has been achieved
-    assert contract.balance() == last_balance + Wei(f"{price} ether")
+    assert contract.balance() == last_balance + presales_in_contract + pubsales_in_contract
     assert contract.reservedTHPrize() == Wei("5 ether")
 
 # Assumption is maxdrop has been set to 20
@@ -695,13 +704,14 @@ def pct_at_50(contract,max):
         set_baseline_4_prizes(contract)
 
     # Let's confirm previous supply is expected 25% (5 of maxDrop of 20)
-    assert supply == max/4
+    assert supply == max/4    
 
     amount_to_mint = (max/4) - 1
-    price = amount_to_mint * 0.055
+    price = amount_to_mint * PUBSALES_FLOAT_VAL
+    pubsales_in_contract = amount_in_wei(price)
 
     # Let's now mint below 50% (up to max/2 - 1 of max) 
-    contract.mint(amount_to_mint,{'from': get_account(8), 'value': Wei(f"{price} ether")})
+    contract.mint(amount_to_mint,{'from': get_account(8), 'value': amount_in_wei(price)})
     
     # No change in TH yet
     assert contract.reservedTHPrize() == th_balance
@@ -711,11 +721,12 @@ def pct_at_50(contract,max):
     no_1st_n_2nd_prizes_yet(first_prize_acct_balance, second_prize_acct_balance)
 
     # Confirm contract balance
-    assert contract.balance() == last_balance + Wei(f"{price} ether")
+    assert contract.balance() == last_balance + amount_in_wei(price)
 
     # Let's now mint up to 50% (up to max/2 of max) 
-    contract.mint(1,{'from': get_account(8), 'value': Wei("0.055 ether")})
-    
+    contract.mint(1,{'from': get_account(8), 'value': amount_in_wei(PUBSALES_FLOAT_VAL)})
+    pubsales_in_contract+=amount_in_wei(PUBSALES_FLOAT_VAL)
+
     # Let's confirm supply is the expected one (max/4) of maxDrop of max)
     assert contract.totalSupply() == supply + (max/4)
 
@@ -727,13 +738,9 @@ def pct_at_50(contract,max):
 
     # No changes in 2nd prize acct yet
     assert get_account(31).balance() == second_prize_acct_balance
-
-    # Calc +25% price
-    amount_to_mint = (max/4)
-    price = amount_to_mint * 0.055
-
+            
     # Confirm contract balance
-    assert contract.balance() == last_balance + Wei(f"{price} ether") - Wei("4 ether")
+    assert contract.balance() == last_balance + pubsales_in_contract - Wei("4 ether")
     assert contract.reservedTHPrize() == Wei("15 ether")
 
 # Assumption is maxdrop has been set to 20
@@ -748,10 +755,11 @@ def pct_at_75(contract,max):
     assert supply == max/2
 
     amount_to_mint = (max/4) - 1
-    price = amount_to_mint * 0.055
+    price = amount_to_mint * PUBSALES_FLOAT_VAL
+    pubsales_in_contract = amount_in_wei(price)
 
     # Let's now mint below to 75% 
-    contract.mint(amount_to_mint,{'from': get_account(3), 'value': Wei(f"{price} ether")})
+    contract.mint(amount_to_mint,{'from': get_account(3), 'value': amount_in_wei(price)})
 
     # No change in TH yet
     assert contract.reservedTHPrize() == th_balance
@@ -761,10 +769,11 @@ def pct_at_75(contract,max):
     assert get_account(31).balance() == second_prize_acct_balance
 
     # Confirm contract balance (30 ether from TH and 9 ether from 1st+2nd prize)
-    assert contract.balance() == last_balance + Wei(f"{price} ether")
+    assert contract.balance() == last_balance + amount_in_wei(price)
 
     # Let's now mint up to 75% 
-    contract.mint(1,{'from': get_account(3), 'value': Wei("0.055 ether")})
+    contract.mint(1,{'from': get_account(3), 'value': amount_in_wei(PUBSALES_FLOAT_VAL)})
+    pubsales_in_contract += amount_in_wei(PUBSALES_FLOAT_VAL)
 
     # Let's confirm supply is the expected one (+1 of maxDrop of 20)
     assert contract.totalSupply() == supply + (max/4)
@@ -778,12 +787,8 @@ def pct_at_75(contract,max):
     # Let's confirm first prize is reserved
     assert get_account(31).balance() == second_prize_acct_balance + Wei("5 ether")
 
-    # Calc +25% price
-    amount_to_mint = (max/4)
-    price = amount_to_mint * 0.055
-
     # Confirm contract balance (30 ether from TH and 9 ether from 1st+2nd prize)
-    assert contract.balance() == last_balance + Wei(f"{price} ether") - Wei("5 ether")
+    assert contract.balance() == last_balance + pubsales_in_contract - Wei("5 ether")
     assert contract.reservedTHPrize() == Wei("30 ether")
 
 def pct_at_100(contract,max):
@@ -795,20 +800,22 @@ def pct_at_100(contract,max):
     assert supply == max*3/4
 
     amount_to_mint = (max/4) - 1
-    price = amount_to_mint * 0.055
+    price = amount_to_mint * PUBSALES_FLOAT_VAL
+    pubsales_in_contract = amount_in_wei(price)
 
     # Let's now mint below 100% (19 of 20) 
-    contract.mint(amount_to_mint,{'from': get_account(9), 'value': Wei(f"{price} ether")})
+    contract.mint(amount_to_mint,{'from': get_account(9), 'value': amount_in_wei(price)})
 
     # Let's confirm 50% give away of +10 ETH has been granted in TH account
     assert contract.reservedTHPrize() == th_balance
     assert contract.reservedTHPrize() == Wei("30 ether")
 
     # Confirm contract balance
-    assert contract.balance() == last_balance + Wei(f"{price} ether")
+    assert contract.balance() == last_balance + amount_in_wei(price)
 
     # Let's now mint up to 100% (up to 20) 
-    contract.mint(1,{'from': get_account(9), 'value': Wei("0.055 ether")})
+    contract.mint(1,{'from': get_account(9), 'value': amount_in_wei(PUBSALES_FLOAT_VAL)})
+    pubsales_in_contract += amount_in_wei(PUBSALES_FLOAT_VAL)
 
     # Let's confirm first prize is reserved
     assert get_account(30).balance() == first_prize_acct_balance
@@ -822,12 +829,8 @@ def pct_at_100(contract,max):
     # Let's confirm 50% give away of +10 ETH has been granted in TH account
     assert contract.reservedTHPrize() == th_balance + Wei("20 ether")        
 
-    # Calc +25% price
-    amount_to_mint = (max/4)
-    price = amount_to_mint * 0.055
-
     # Confirm contract balance
-    assert contract.balance() == last_balance + Wei(f"{price} ether")
+    assert contract.balance() == last_balance + pubsales_in_contract
     assert contract.reservedTHPrize() == Wei("50 ether")
 
 def mint_everything(contract,max):

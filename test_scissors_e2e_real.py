@@ -1,3 +1,7 @@
+# 
+# (c) 2022, rpsnft.art
+#
+
 import pytest
 import brownie
 

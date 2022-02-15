@@ -18,6 +18,10 @@ def get_account(index=None, id=None):
         return accounts.add(config["wallets"]["from_key"])
     return None
 
+# expects input as float of ether, returns value in ethers
+def amount_in_wei(_amount):
+    return Wei(f"{round(_amount,4)} ether")
+
 def amount_in_eths(_amount):
     return Wei(_amount).to("ether").quantize(Decimal('1.000'))
 

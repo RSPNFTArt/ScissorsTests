@@ -1,10 +1,15 @@
+# 
+# (c) 2022, rpsnft.art
+#
+
 import pytest
 import brownie
 
 from decimal import *
 from brownie import network, Scissors, Wei, exceptions
-from scripts.helpful_scripts import get_account
-from scripts.helpful_tests import create_contract,init_presales,finish_presales,setMaxDrop
+from scripts.helpful_scripts import get_account,amount_in_wei
+from scripts.helpful_tests import create_contract,init_presales,finish_presales,setMaxDrop,\
+    PRESALES_MINT_PRICE,PUBSALES_MINT_PRICE,PRESALES_FLOAT_VAL
 
 # Set the test environment at module level for all tests below
 @pytest.fixture(scope="module", autouse=True)
@@ -19,7 +24,7 @@ def isolation(fn_isolation):
     pass
 
 # Let us validate if we can mint one NFT during public sales 
-#@pytest.mark.skip(reason="focus") 
+#@pytest.mark.skip(reason="focus")
 def test_cannot_mint_scissor_public_sales_during_presales(contract):
     if network.show_active() not in ["development"] or "fork" in network.show_active():
         pytest.skip("Only for local testing")
@@ -29,18 +34,18 @@ def test_cannot_mint_scissor_public_sales_during_presales(contract):
     
     # "Pre-sales has not started yet or wallet not eligible"
     with brownie.reverts("dev: Pre-sales has not finished yet"):
-        contract.mint(1,{'from': get_account(1), 'value': Wei("0.055 ether")})
+        contract.mint(1,{'from': get_account(1), 'value': Wei(PRESALES_MINT_PRICE)})
 
     finish_presales(contract)
 
     # get balance
     last_balance = contract.balance()
 
-    contract.mint(1,{'from': get_account(1), 'value': Wei("0.055 ether")})
+    contract.mint(1,{'from': get_account(1), 'value': Wei(PUBSALES_MINT_PRICE)})
     
     assert contract.totalSupply() == (supply + 1)
     assert contract.ownerOf(1) == get_account(1)
-    assert contract.balance() == last_balance + Wei("0.055 ether")
+    assert contract.balance() == last_balance + Wei(PUBSALES_MINT_PRICE)
 
     # get last id generated and validate filename
     tokenId = contract.totalSupply()
@@ -63,7 +68,7 @@ def test_cannot_purchase_outside_presales(contract):
 
     # "Pre-sales has not started yet or wallet not eligible"
     with brownie.reverts("dev: Pre-sales has not started yet"):
-        contract.preSalesMint(1,{'from': get_account(1), 'value': Wei("0.055 ether")})
+        contract.preSalesMint(1,{'from': get_account(1), 'value': Wei(PRESALES_MINT_PRICE)})
 
     assert contract.totalSupply() == supply
     assert contract.balance() == last_balance 
@@ -119,10 +124,10 @@ def test_cannot_do_presales_mint_when_finished(contract):
 
     assert(not contract.inPublicSales())
 
-    contract.preSalesMint(2,{'from': get_account(1), 'value': Wei("0.110 ether")})
+    contract.preSalesMint(2,{'from': get_account(1), 'value': amount_in_wei(PRESALES_FLOAT_VAL*2) })
     
     assert contract.totalSupply() == supply + 2
-    assert contract.balance() == last_balance + Wei("0.110 ether")
+    assert contract.balance() == last_balance + amount_in_wei(PRESALES_FLOAT_VAL*2)
     assert (contract.ownerOf(1) == get_account(1) and 
            contract.ownerOf(2) == get_account(1))
     assert(contract.tokenURI(1) == f"https://ipfs.io/ipfs/1.json" and 
@@ -133,7 +138,7 @@ def test_cannot_do_presales_mint_when_finished(contract):
     # pre-sales has finished and even there's minting left (1 left as we did 2 of the 3)
     # and account 2 in the list, we throw exception  
     with brownie.reverts("dev: Pre-sales has already finished"):
-        contract.preSalesMint(1,{'from': get_account(2), 'value': Wei("0.055 ether")})
+        contract.preSalesMint(1,{'from': get_account(2), 'value': Wei(PRESALES_MINT_PRICE)})
     
 # Only a set of wallets will be able to mint during presales
 #@pytest.mark.skip(reason="focus")
@@ -151,7 +156,7 @@ def test_cannot_mint_presales_if_not_elligible(contract):
     
     # Wallet not eligible
     with pytest.raises(exceptions.VirtualMachineError) as excinfo:
-        contract.preSalesMint(1,{'from': get_account(1), 'value': Wei("0.055 ether")})
+        contract.preSalesMint(1,{'from': get_account(1), 'value': Wei(PRESALES_MINT_PRICE)})
 
     assert contract.totalSupply() == supply
     assert contract.balance() == last_balance 
@@ -170,7 +175,7 @@ def test_cannot_exceed_per_wallet_amount_presales(contract):
     # define maximum pre-sales of 3 and sales of 8 
     setMaxDrop(contract,8,3)
 
-    contract.preSalesMint(2,{'from': get_account(2), 'value': Wei("0.110 ether")})
+    contract.preSalesMint(2,{'from': get_account(2), 'value': amount_in_wei(PRESALES_FLOAT_VAL*2)})
     
     # get supply and balance
     supply = contract.totalSupply()
@@ -178,7 +183,7 @@ def test_cannot_exceed_per_wallet_amount_presales(contract):
 
     # max pre-sales reached per wallet (e.g 2), so next line should provide exception  
     with brownie.reverts("dev: Total pre-sales amount exceeded for wallet"):
-        contract.preSalesMint(1,{'from': get_account(2), 'value': Wei("0.055 ether")})
+        contract.preSalesMint(1,{'from': get_account(2), 'value': Wei(PRESALES_MINT_PRICE)})
 
     assert contract.totalSupply() == supply
     assert contract.balance() == last_balance
@@ -204,11 +209,11 @@ def test_can_do_mint_during_presales(contract):
     supply = contract.totalSupply()
     last_balance = contract.balance()
     
-    contract.preSalesMint(2,{'from': get_account(1), 'value': Wei("0.110 ether")})
-    contract.preSalesMint(1,{'from': get_account(2), 'value': Wei("0.055 ether")})
+    contract.preSalesMint(2,{'from': get_account(1), 'value': amount_in_wei(PRESALES_FLOAT_VAL*2)})
+    contract.preSalesMint(1,{'from': get_account(2), 'value': Wei(PRESALES_MINT_PRICE)})
 
     assert contract.totalSupply() == supply + 3
-    assert contract.balance() == last_balance + Wei("0.165 ether")
+    assert contract.balance() == last_balance + amount_in_wei(PRESALES_FLOAT_VAL*3)
     assert (contract.ownerOf(1) == get_account(1) and 
            contract.ownerOf(2) == get_account(1) and
            contract.ownerOf(3) == get_account(2))
@@ -231,8 +236,8 @@ def test_cannot_mint_over_max_presale(contract):
     # define maximum pre-sales of 3 and sales of 8 
     setMaxDrop(contract,8,3)
 
-    contract.preSalesMint(2,{'from': get_account(1), 'value': Wei("0.110 ether")})
-    contract.preSalesMint(1,{'from': get_account(2), 'value': Wei("0.055 ether")})
+    contract.preSalesMint(2,{'from': get_account(1), 'value': amount_in_wei(PRESALES_FLOAT_VAL*2)})
+    contract.preSalesMint(1,{'from': get_account(2), 'value': Wei(PRESALES_MINT_PRICE)})
 
     # get supply and balance
     supply = contract.totalSupply()
@@ -242,7 +247,7 @@ def test_cannot_mint_over_max_presale(contract):
 
     # max pre-sales reached (3), so next line should provide exception  
     with brownie.reverts("dev: Pre-sales SOLD-OUT"):
-        contract.preSalesMint(1,{'from': get_account(2), 'value': Wei("0.055 ether")})
+        contract.preSalesMint(1,{'from': get_account(2), 'value': Wei(PRESALES_MINT_PRICE)})
 
     assert contract.totalSupply() == supply
     assert contract.balance() == last_balance
@@ -274,7 +279,7 @@ def test_cannot_perform_mint_after_presales(contract):
 
     # pre-sales has finished, so we cannot perform presales minting  
     with brownie.reverts("dev: Pre-sales has already finished"):
-        contract.preSalesMint(1,{'from': get_account(3), 'value': Wei("0.055 ether")})
+        contract.preSalesMint(1,{'from': get_account(3), 'value': Wei(PRESALES_MINT_PRICE)})
 
     # supply should be the same
     assert contract.totalSupply() == supply
@@ -301,8 +306,9 @@ def test_cannot_mint_in_presales_below_price(contract):
     with brownie.reverts("dev: Wrong price provided"):
         contract.preSalesMint(1,{'from': get_account(3), 'value': Wei("0.0001 ether")})
 
+    # right price, wrong quantity
     with brownie.reverts("dev: Wrong price provided"):
-        contract.preSalesMint(2,{'from': get_account(3), 'value': Wei("0.055 ether")})
+        contract.preSalesMint(2,{'from': get_account(3), 'value': Wei(PRESALES_MINT_PRICE)})
 
     # supply should be the same
     assert contract.totalSupply() == supply
@@ -358,7 +364,7 @@ def test_cannot_mint_in_presales_during_pause(contract):
 
     # should raise exception  
     with brownie.reverts("dev: Minting is paused"):
-        contract.preSalesMint(1,{'from': get_account(5), 'value': Wei("0.055 ether")})
+        contract.preSalesMint(1,{'from': get_account(5), 'value': Wei(PRESALES_MINT_PRICE)})
 
     # supply should be the same
     assert contract.totalSupply() == supply

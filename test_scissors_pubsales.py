@@ -1,10 +1,15 @@
+# 
+# (c) 2022, rpsnft.art
+#
+
 import pytest
 import brownie
 
 from decimal import *
 from brownie import network, Scissors, Wei 
-from scripts.helpful_scripts import get_account
-from scripts.helpful_tests import create_contract,finish_presales,setMaxDrop
+from scripts.helpful_scripts import get_account,amount_in_wei
+from scripts.helpful_tests import create_contract,finish_presales,setMaxDrop,\
+    PRESALES_MINT_PRICE,PUBSALES_MINT_PRICE,PRESALES_FLOAT_VAL,PUBSALES_FLOAT_VAL
 
 # Set the test environment at module level for all tests below
 @pytest.fixture(scope="module", autouse=True)
@@ -39,11 +44,11 @@ def test_can_mint_scissor_public_sales(contract):
     # get balance
     last_balance = contract.balance()
 
-    contract.mint(1,{'from': get_account(1), 'value': Wei("0.055 ether")})
+    contract.mint(1,{'from': get_account(1), 'value': Wei(PUBSALES_MINT_PRICE)})
     
     assert contract.totalSupply() == (supply + 1)
     assert contract.ownerOf(1) == get_account(1)
-    assert contract.balance() == last_balance + Wei("0.055 ether")
+    assert contract.balance() == last_balance + Wei(PUBSALES_MINT_PRICE)
 
     # get last id generated and validate filename
     tokenId = contract.totalSupply()
@@ -67,8 +72,9 @@ def test_cannot_mint_below_price_pubsale(contract):
     with brownie.reverts("dev: Wrong price provided"):
         contract.mint(1,{'from': get_account(3), 'value': Wei("0.0001 ether")})
 
+    # right price with wrong quantity
     with brownie.reverts("dev: Wrong price provided"):
-        contract.mint(2,{'from': get_account(3), 'value': Wei("0.055 ether")})
+        contract.mint(2,{'from': get_account(3), 'value': Wei(PUBSALES_MINT_PRICE)})
 
     # supply should be the same
     assert contract.totalSupply() == supply
@@ -117,11 +123,11 @@ def test_cannot_mint_over_max_per_tx_limit(contract):
     last_balance = contract.balance()
 
     # We should be able to perform this (not exceeding max per-tx limit)
-    contract.mint(6,{'from': get_account(6), 'value': Wei("0.330 ether")})
+    contract.mint(6,{'from': get_account(6), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*6)})
 
     # here the amount should increase    
     assert contract.totalSupply() == supply + 6
-    assert contract.balance() == last_balance + Wei("0.330 ether")
+    assert contract.balance() == last_balance + amount_in_wei(PUBSALES_FLOAT_VAL*6)
 
     # Let's keep supply and balance to check no variance in supply
     supply = contract.totalSupply()
@@ -129,7 +135,7 @@ def test_cannot_mint_over_max_per_tx_limit(contract):
 
     # max per tx public sales limit has been reached (e.g 25), so next line should provide exception  
     with brownie.reverts("dev: Specified amount exceeds per-wallet maximum mint"):
-        contract.mint(7,{'from': get_account(6), 'value': Wei("0.385 ether")})
+        contract.mint(7,{'from': get_account(6), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*7)})
 
     # supply should be the same
     assert contract.totalSupply() == supply
@@ -153,15 +159,18 @@ def test_sold_out_max_reached(contract):
     last_balance = contract.balance()
 
     # We should be able to perform this (not exceeding max total limit yet, set in 20)
-    contract.mint(6,{'from': get_account(6), 'value': Wei("0.330 ether")})
-    contract.mint(10,{'from': get_account(7), 'value': Wei("0.550 ether")})
-    contract.mint(4,{'from': get_account(2), 'value': Wei("0.220 ether")})
+    contract.mint(6,{'from': get_account(6), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*6)})
+    contract.mint(10,{'from': get_account(7), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*10)})
+    contract.mint(4,{'from': get_account(2), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*4)})
     
     # here the amount should increase    
     assert contract.totalSupply() == supply + 20
         
     # we subtract the ethers from 1st+2nd prize (4+5 ethers)
-    assert contract.balance() == last_balance + Wei("1.1 ether") - Wei("9 ether")
+    sum_in_contract = amount_in_wei(PUBSALES_FLOAT_VAL*6) + \
+                      amount_in_wei(PUBSALES_FLOAT_VAL*10) + \
+                      amount_in_wei(PUBSALES_FLOAT_VAL*4)
+    assert contract.balance() == last_balance + sum_in_contract - Wei("9 ether")
     
     # Let's keep supply and balance to check no variance in supply
     supply = contract.totalSupply()
@@ -171,7 +180,7 @@ def test_sold_out_max_reached(contract):
 
     # max per tx public sales limit has been reached (e.g 25), so next line should provide exception  
     with brownie.reverts("dev: SOLD OUT!"):
-        contract.mint(1,{'from': get_account(8), 'value': Wei("0.055 ether")})
+        contract.mint(1,{'from': get_account(8), 'value': amount_in_wei(PUBSALES_FLOAT_VAL)})
 
     # supply should be the same
     assert contract.totalSupply() == supply
@@ -181,7 +190,7 @@ def test_sold_out_max_reached(contract):
 
     # max per tx public sales limit has been reached (e.g 25), so next line should provide exception  
     with brownie.reverts("dev: SOLD OUT!"):
-        contract.mint(4,{'from': get_account(6), 'value': Wei("0.220 ether")})
+        contract.mint(4,{'from': get_account(6), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*4)})
 
     # supply should be the same
     assert contract.totalSupply() == supply    
@@ -263,10 +272,10 @@ def test_burn_tokens(contract):
     finish_presales(contract)
 
     # mint 10% (40)
-    contract.mint(10,{'from': get_account(14), 'value': Wei("0.55 ether")})
-    contract.mint(10,{'from': get_account(15), 'value': Wei("0.55 ether")})
-    contract.mint(10,{'from': get_account(16), 'value': Wei("0.55 ether")})
-    contract.mint(10,{'from': get_account(17), 'value': Wei("0.55 ether")})
+    contract.mint(10,{'from': get_account(14), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*10)})
+    contract.mint(10,{'from': get_account(15), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*10)})
+    contract.mint(10,{'from': get_account(16), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*10)})
+    contract.mint(10,{'from': get_account(17), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*10)})
 
     # burn item #10
     contract.burn(10,{'from': get_account(14)})

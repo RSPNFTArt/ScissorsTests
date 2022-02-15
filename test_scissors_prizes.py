@@ -1,14 +1,19 @@
+# 
+# (c) 2022, rpsnft.art
+#
+
 import pytest
 import brownie
 import numpy as np
 
 from decimal import *
 from brownie import network, Scissors, Wei 
-from scripts.helpful_scripts import get_account
+from scripts.helpful_scripts import get_account, amount_in_wei
 from scripts.helpful_tests import create_contract,finish_presales,first_prize_sent,\
                     get_founder_balance,second_prize_sent,third_prize_sent,withdrawn_checks,pct_at_25,\
                     pct_at_50, pct_at_75, mint_everything, get_founder_accts, register_teams,\
-                    whitelist, init_presales, setMaxDrop
+                    whitelist, init_presales, setMaxDrop,\
+                    PRESALES_MINT_PRICE,PUBSALES_MINT_PRICE,PRESALES_FLOAT_VAL,PUBSALES_FLOAT_VAL
 
 # Set the test environment at module level for all tests below
 @pytest.fixture(scope="module", autouse=True)
@@ -175,13 +180,13 @@ def test_withdrawn_eths_in_founder_accounts_in_two_parts(contract):
     # set max per tx limit
     contract.setMaxSalesNFTAmount(10)
 
-    # mint 5 (up to 25%)
+    # mint 10 (up to 25%)
     pct_at_25(contract,40)
     
     # Let's even mint more
-    contract.mint(7,{'from': get_account(21), 'value': Wei("0.385 ether")})
+    contract.mint(7,{'from': get_account(21), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*7)})
 
-    # Minted 14, 25% of 40 = 10 so, 
+    # Minted 17, 25% of 40 = 10 so, not reaching to 50%
     # max_balance = last_balance - 5 ether (25% reserved) - 10 ether next part when we reach 50%
     max_balance = contract.maxBalanceToWithdraw()
     last_balance = contract.balance()
@@ -208,6 +213,8 @@ def test_withdrawn_eths_in_founder_accounts_in_two_parts(contract):
     # Request withdrawing
     contract.withdraw({'from': get_account(0)})
     last_balance = contract.balance()
+    # everything so far withdrawn
+    assert contract.maxBalanceToWithdraw() == 0
 
     # We have not reached 50%, so after withdrawn contract balance should 
     # be 5 ether (in pool), 10 ether (waiting for next TH) + 4 ether (1st prize)
@@ -233,26 +240,32 @@ def test_withdrawn_eths_in_founder_accounts_in_two_parts(contract):
     # Get contract balance
     last_balance = contract.balance()
 
-    # Let's now mint after withdrawn 
-    contract.mint(7,{'from': get_account(21), 'value': Wei("0.385 ether")})
+    # Let's now mint after withdrawn     
+    contract.mint(7,{'from': get_account(21), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*7)})
 
-    # Minted 21, 50% of 40 = 20 so
-    #  1.- last_balance = (-10 that are moved to TH) + (-4 for 1st prize) + 0.385 ether from recent purchase
+    # Minted 17+7 (24), 50% of 40 = 20 so
+    #  1.- last_balance = (-10 that are moved to TH) + (-4 for 1st prize) + amount_in_wei(PUBSALES_FLOAT_VAL*7)
+    #      from recent purchase. No more than amount_in_wei(PUBSALES_FLOAT_VAL*7) as we have withdrawn
     #  2.- max_balance = last_balance - 15 ether, so max_balance = 0   
+
     max_balance = contract.maxBalanceToWithdraw()
     last_balance = contract.balance()
-    assert last_balance == Wei("5 ether") + Wei("10 ether") + Wei("0.385 ether")
+    assert last_balance == Wei("5 ether") + Wei("10 ether") + amount_in_wei(PUBSALES_FLOAT_VAL*7)
     assert max_balance == 0 
 
     # we now charge contract with +35 ether 
     # new max_balance = 35.231 - 15 ether (3rd part TH) - 5 ether (2nd prize)= 15.231
-
     contract.chargeContract({'from': get_account(22), 
                             'value': Wei("35 ether")})
     max_balance = contract.maxBalanceToWithdraw()
     last_balance = contract.balance()
-    assert last_balance == Wei("5 ether") + Wei("10 ether") + Wei("35.385 ether")
-    assert max_balance == Wei("20.385 ether") - Wei("5 ether") 
+
+    # the max balance is the existing balance subtracting the reserve for TH
+    # as we have past 50% we are preserving following amounts from withdrawn:
+    #   TH 5+10 (from first two quarters) + future quarter (15 TH)
+    #   5 ETH from 2nd prize for future quarter (2nd prize)
+    #   4 ETH were already provided so are discounted in last_balance
+    assert max_balance == last_balance - Wei("15 ether") - Wei("10 ether") - Wei("5 ether") - Wei("5 ether") 
 
     contract.withdraw({'from': get_account(0)})
 
@@ -267,6 +280,9 @@ def test_withdrawn_eths_in_founder_accounts_in_two_parts(contract):
                          accs_vip,
                          mult_vip_expected) 
   
+    # everything so far withdrawn
+    assert contract.maxBalanceToWithdraw() == 0
+    
     # Contract balance now reserves 
     # 5 ether (TH, 1st part)
     # 10 ether (TH, 2nd part)
@@ -297,7 +313,7 @@ def test_eth_first_give_away_can_pull_transfers(contract):
         contract.sendGiveAway(1, winners)
 
     # we mint 50% (4 of 8)
-    contract.mint(4,{'from': get_account(18), 'value': Wei("0.220 ether")})
+    contract.mint(4,{'from': get_account(18), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*4)})
 
     first_prize_sent(contract)
 
@@ -320,7 +336,7 @@ def test_eth_first_give_away_cannot_be_pulled_by_non_winners(contract):
         contract.sendGiveAway(1, winners)
 
     # we mint 50%
-    contract.mint(4,{'from': get_account(18), 'value': Wei("0.220 ether")})
+    contract.mint(4,{'from': get_account(18), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*4)})
 
     first_prize_sent(contract,False)
 
@@ -345,21 +361,21 @@ def test_eth_second_give_away_can_pull_transfers(contract):
     # more than 10 so we get awarded winners and confirm rest of accounts 
     # keep previous balance whereas awarded ones get their balance incremented
     # in contract.SECOND_PRIZE_PER_WALLET_ETH_AMOUNT() each
-    contract.mint(2,{'from': get_account(6), 'value': Wei("0.110 ether")})
-    contract.mint(2,{'from': get_account(9), 'value': Wei("0.110 ether")})
-    contract.mint(2,{'from': get_account(10), 'value': Wei("0.110 ether")})
-    contract.mint(2,{'from': get_account(11), 'value': Wei("0.110 ether")})
-    contract.mint(2,{'from': get_account(12), 'value': Wei("0.110 ether")})
-    contract.mint(2,{'from': get_account(13), 'value': Wei("0.110 ether")})
-    contract.mint(2,{'from': get_account(16), 'value': Wei("0.110 ether")})
-    contract.mint(2,{'from': get_account(17), 'value': Wei("0.110 ether")})
-    contract.mint(2,{'from': get_account(18), 'value': Wei("0.110 ether")})
-    contract.mint(2,{'from': get_account(19), 'value': Wei("0.110 ether")})
-    contract.mint(2,{'from': get_account(14), 'value': Wei("0.110 ether")})
-    contract.mint(2,{'from': get_account(15), 'value': Wei("0.110 ether")})
-    contract.mint(2,{'from': get_account(8), 'value': Wei("0.110 ether")})
-    contract.mint(2,{'from': get_account(5), 'value': Wei("0.110 ether")})
-    contract.mint(2,{'from': get_account(7), 'value': Wei("0.110 ether")})
+    contract.mint(2,{'from': get_account(6), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(9), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(10), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(11), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(12), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(13), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(16), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(17), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(18), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(19), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(14), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(15), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(8), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(5), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(7), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
     
     second_prize_sent(contract)
 
@@ -382,21 +398,21 @@ def test_eth_second_give_away_cannot_be_pulled_by_non_winners(contract):
     # more than 10 so we get awarded winners and confirm rest of accounts 
     # keep previous balance whereas awarded ones get their balance incremented
     # in contract.SECOND_PRIZE_PER_WALLET_ETH_AMOUNT() each
-    contract.mint(2,{'from': get_account(6), 'value': Wei("0.110 ether")})
-    contract.mint(2,{'from': get_account(9), 'value': Wei("0.110 ether")})
-    contract.mint(2,{'from': get_account(10), 'value': Wei("0.110 ether")})
-    contract.mint(2,{'from': get_account(11), 'value': Wei("0.110 ether")})
-    contract.mint(2,{'from': get_account(12), 'value': Wei("0.110 ether")})
-    contract.mint(2,{'from': get_account(13), 'value': Wei("0.110 ether")})
-    contract.mint(2,{'from': get_account(16), 'value': Wei("0.110 ether")})
-    contract.mint(2,{'from': get_account(17), 'value': Wei("0.110 ether")})
-    contract.mint(2,{'from': get_account(18), 'value': Wei("0.110 ether")})
-    contract.mint(2,{'from': get_account(19), 'value': Wei("0.110 ether")})
-    contract.mint(2,{'from': get_account(14), 'value': Wei("0.110 ether")})
-    contract.mint(2,{'from': get_account(15), 'value': Wei("0.110 ether")})
-    contract.mint(2,{'from': get_account(8), 'value': Wei("0.110 ether")})
-    contract.mint(2,{'from': get_account(5), 'value': Wei("0.110 ether")})
-    contract.mint(2,{'from': get_account(7), 'value': Wei("0.110 ether")})
+    contract.mint(2,{'from': get_account(6), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(9), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(10), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(11), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(12), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(13), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(16), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(17), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(18), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(19), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(14), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(15), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(8), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(5), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(7), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
 
     second_prize_sent(contract,False)
 
@@ -425,11 +441,11 @@ def test_eth_third_give_away_can_pull_transfers(contract):
     th_balance = contract.reservedTHPrize()
 
     # presales is just 10 (not yet 25%)
-    contract.preSalesMint(2,{'from': get_account(3), 'value': Wei("0.110 ether")})
-    contract.preSalesMint(2,{'from': get_account(4), 'value': Wei("0.110 ether")})
-    contract.preSalesMint(2,{'from': get_account(8), 'value': Wei("0.110 ether")})
-    contract.preSalesMint(2,{'from': get_account(9), 'value': Wei("0.110 ether")})
-    contract.preSalesMint(2,{'from': get_account(10), 'value': Wei("0.110 ether")})
+    contract.preSalesMint(2,{'from': get_account(3), 'value': amount_in_wei(PRESALES_FLOAT_VAL*2)})
+    contract.preSalesMint(2,{'from': get_account(4), 'value': amount_in_wei(PRESALES_FLOAT_VAL*2)})
+    contract.preSalesMint(2,{'from': get_account(8), 'value': amount_in_wei(PRESALES_FLOAT_VAL*2)})
+    contract.preSalesMint(2,{'from': get_account(9), 'value': amount_in_wei(PRESALES_FLOAT_VAL*2)})
+    contract.preSalesMint(2,{'from': get_account(10), 'value': amount_in_wei(PRESALES_FLOAT_VAL*2)})
 
     # TH balance should be the same as we have not pass the 25% of max (5 = 20/4)
     assert contract.reservedTHPrize() == th_balance
@@ -449,21 +465,21 @@ def test_eth_third_give_away_can_pull_transfers(contract):
     assert supply == 160 
 
     # we mint 100% (40) among 12 different accounts 
-    contract.mint(3,{'from': get_account(6), 'value': Wei("0.165 ether")})
-    contract.mint(3,{'from': get_account(9), 'value': Wei("0.165 ether")})
-    contract.mint(3,{'from': get_account(10), 'value': Wei("0.165 ether")})
-    contract.mint(3,{'from': get_account(11), 'value': Wei("0.165 ether")})
-    contract.mint(3,{'from': get_account(12), 'value': Wei("0.165 ether")})
-    contract.mint(3,{'from': get_account(13), 'value': Wei("0.165 ether")})
-    contract.mint(3,{'from': get_account(16), 'value': Wei("0.165 ether")})
-    contract.mint(3,{'from': get_account(17), 'value': Wei("0.165 ether")})
-    contract.mint(3,{'from': get_account(18), 'value': Wei("0.165 ether")})
-    contract.mint(3,{'from': get_account(19), 'value': Wei("0.165 ether")})
-    contract.mint(2,{'from': get_account(14), 'value': Wei("0.110 ether")})
-    contract.mint(2,{'from': get_account(15), 'value': Wei("0.110 ether")})
-    contract.mint(2,{'from': get_account(8), 'value': Wei("0.110 ether")})
-    contract.mint(2,{'from': get_account(5), 'value': Wei("0.110 ether")})
-    contract.mint(2,{'from': get_account(7), 'value': Wei("0.110 ether")})
+    contract.mint(3,{'from': get_account(6), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*3)})
+    contract.mint(3,{'from': get_account(9), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*3)})
+    contract.mint(3,{'from': get_account(10), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*3)})
+    contract.mint(3,{'from': get_account(11), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*3)})
+    contract.mint(3,{'from': get_account(12), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*3)})
+    contract.mint(3,{'from': get_account(13), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*3)})
+    contract.mint(3,{'from': get_account(16), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*3)})
+    contract.mint(3,{'from': get_account(17), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*3)})
+    contract.mint(3,{'from': get_account(18), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*3)})
+    contract.mint(3,{'from': get_account(19), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*3)})
+    contract.mint(2,{'from': get_account(14), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(15), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(8), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(5), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(7), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
     
     assert(contract.ownerOf(161) == get_account(6))
     assert(contract.ownerOf(162) == get_account(6))
@@ -516,11 +532,11 @@ def test_eth_third_give_away_cannot_be_pulled_by_non_winners(contract):
     th_balance = get_account(2).balance()
 
     # presales is just 10 (not yet 25%)
-    contract.preSalesMint(2,{'from': get_account(3), 'value': Wei("0.110 ether")})
-    contract.preSalesMint(2,{'from': get_account(4), 'value': Wei("0.110 ether")})
-    contract.preSalesMint(2,{'from': get_account(8), 'value': Wei("0.110 ether")})
-    contract.preSalesMint(2,{'from': get_account(9), 'value': Wei("0.110 ether")})
-    contract.preSalesMint(2,{'from': get_account(10), 'value': Wei("0.110 ether")})
+    contract.preSalesMint(2,{'from': get_account(3), 'value': amount_in_wei(PRESALES_FLOAT_VAL*2)})
+    contract.preSalesMint(2,{'from': get_account(4), 'value': amount_in_wei(PRESALES_FLOAT_VAL*2)})
+    contract.preSalesMint(2,{'from': get_account(8), 'value': amount_in_wei(PRESALES_FLOAT_VAL*2)})
+    contract.preSalesMint(2,{'from': get_account(9), 'value': amount_in_wei(PRESALES_FLOAT_VAL*2)})
+    contract.preSalesMint(2,{'from': get_account(10), 'value': amount_in_wei(PRESALES_FLOAT_VAL*2)})
 
     # TH balance should be the same as we have not pass the 25% of max (5 = 20/4)
     assert get_account(2).balance() == th_balance
@@ -540,21 +556,21 @@ def test_eth_third_give_away_cannot_be_pulled_by_non_winners(contract):
     assert supply == 160 
 
     # we mint 100% (40) among 12 different accounts 
-    contract.mint(3,{'from': get_account(6), 'value': Wei("0.165 ether")})
-    contract.mint(3,{'from': get_account(9), 'value': Wei("0.165 ether")})
-    contract.mint(3,{'from': get_account(10), 'value': Wei("0.165 ether")})
-    contract.mint(3,{'from': get_account(11), 'value': Wei("0.165 ether")})
-    contract.mint(3,{'from': get_account(12), 'value': Wei("0.165 ether")})
-    contract.mint(3,{'from': get_account(13), 'value': Wei("0.165 ether")})
-    contract.mint(3,{'from': get_account(16), 'value': Wei("0.165 ether")})
-    contract.mint(3,{'from': get_account(17), 'value': Wei("0.165 ether")})
-    contract.mint(3,{'from': get_account(18), 'value': Wei("0.165 ether")})
-    contract.mint(3,{'from': get_account(19), 'value': Wei("0.165 ether")})
-    contract.mint(2,{'from': get_account(14), 'value': Wei("0.110 ether")})
-    contract.mint(2,{'from': get_account(15), 'value': Wei("0.110 ether")})
-    contract.mint(2,{'from': get_account(8), 'value': Wei("0.110 ether")})
-    contract.mint(2,{'from': get_account(5), 'value': Wei("0.110 ether")})
-    contract.mint(2,{'from': get_account(7), 'value': Wei("0.110 ether")})
+    contract.mint(3,{'from': get_account(6), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*3)})
+    contract.mint(3,{'from': get_account(9), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*3)})
+    contract.mint(3,{'from': get_account(10), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*3)})
+    contract.mint(3,{'from': get_account(11), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*3)})
+    contract.mint(3,{'from': get_account(12), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*3)})
+    contract.mint(3,{'from': get_account(13), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*3)})
+    contract.mint(3,{'from': get_account(16), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*3)})
+    contract.mint(3,{'from': get_account(17), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*3)})
+    contract.mint(3,{'from': get_account(18), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*3)})
+    contract.mint(3,{'from': get_account(19), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*3)})
+    contract.mint(2,{'from': get_account(14), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(15), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(8), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(5), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(7), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
     
     assert(contract.ownerOf(161) == get_account(6))
     assert(contract.ownerOf(162) == get_account(6))
@@ -595,10 +611,10 @@ def test_burn_tokens_th_calc(contract):
     finish_presales(contract)
 
     # mint 10% (40)
-    contract.mint(10,{'from': get_account(14), 'value': Wei("0.55 ether")})
-    contract.mint(10,{'from': get_account(15), 'value': Wei("0.55 ether")})
-    contract.mint(10,{'from': get_account(16), 'value': Wei("0.55 ether")})
-    contract.mint(10,{'from': get_account(17), 'value': Wei("0.55 ether")})
+    contract.mint(10,{'from': get_account(14), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*10)})
+    contract.mint(10,{'from': get_account(15), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*10)})
+    contract.mint(10,{'from': get_account(16), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*10)})
+    contract.mint(10,{'from': get_account(17), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*10)})
 
     # Cannot set the new MaxDrop below already issued amount
     with brownie.reverts("dev: cannot set maxDrop below already supply"):
@@ -615,4 +631,4 @@ def test_burn_tokens_th_calc(contract):
 
     # let's try just an additional one to get SOLD OUT message  
     with brownie.reverts("dev: SOLD OUT!"):
-        contract.mint(1,{'from': get_account(11), 'value': Wei("0.055 ether")})
+        contract.mint(1,{'from': get_account(11), 'value': amount_in_wei(PUBSALES_FLOAT_VAL)})
