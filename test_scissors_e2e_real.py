@@ -34,4 +34,4 @@ def test_e2e_real_unit_test(contract):
         pytest.skip("Only for local testing")
     
     # 541.75 = 550 (0.055x10000 - 0.055x150 free)
-    complete_e2e_test(contract,390,9,10,275,10000,25,150,541.75)
+    complete_e2e_test(contract,390,9,10,275,10000,25,150,689.35)

@@ -1,6 +1,5 @@
 from cmath import phase
 from turtle import pu
-import pytest
 import brownie
 from brownie import Wei,convert,accounts,config,network,Scissors
 from scripts.helpful_scripts import get_account,amount_in_eths,account_in_eths,eths_r_equal,amount_in_wei
@@ -13,7 +12,7 @@ PUBSALES_MINT_PRICE = "0.070 ether"
 
 def create_contract():
     scissor = Scissors.deploy({"from": get_account(0)})    
-    scissor.setPrizesAccounts(get_account(30),get_account(31))
+    scissor.setPrizesAccounts(get_account(30))
     scissor.chargeContract({'from': get_account(4), 'value': Wei("70 ether")})
     scissor.unpause()
     scissor.setBaseURI("https://ipfs.io/ipfs/")
@@ -110,6 +109,8 @@ def withdrawn_checks(contract,max_balance,vip_tokens,current_balance,previous_ba
         expected = mult_vip_expected[i]*vip_stk
         vip_expected.append(expected)
 
+        print(f"payments waiting for acct = {amount_in_eths(contract.payments(get_account(accs_vip[i])))}")
+        print(f"expected = { amount_in_eths(expected) }")
         assert eths_r_equal(contract.payments(get_account(accs_vip[i])), expected)
 
         # get current balances
@@ -141,43 +142,64 @@ def whitelist(contract, _whiteListMintAmount):
     numGroupsOf50 = ownerMint // 50
     tokensRemaining = ownerMint % 50
 
+    print(f"numGroupsOf50 : {numGroupsOf50}")
+    print(f"tokensRem: {tokensRemaining}")
+
     # try to exceed the max amount in 1 to get error
     with brownie.reverts("dev: the initial amount is exceeded"):
         contract.initialMint(_whiteListMintAmount + 1, {'from': get_account(0)})
 
     expectedPartial = 0
+    print(f"expPart #1: {expectedPartial}")
+
+    n = 0 
     # Initial mint of one part 
     # part to be minted by whitelist owners = 10 (next section)
     if numGroupsOf50 > 1:
         contract.initialMint(50,{'from': get_account(0)})
         numGroupsOf50 -= 1
         expectedPartial += 50
+        print(f"expPart #{n} : {expectedPartial}")
+        n+=1
     
     # Mint 10
-    contract.addToWhiteList([get_account(40),get_account(41),get_account(42)],{'from': get_account(0)})
+    contract.addToWhiteList([get_account(40),get_account(41),get_account(42),
+                             get_account(43),get_account(44)],{'from': get_account(0)})
 
     with brownie.reverts("dev: Total amount exceeded for white-listed wallet"):
         contract.whiteListMint(30,{"from":get_account(40)})
 
     # Whitelist Owners minting - 10 mints
-    contract.whiteListMint(3,{"from":get_account(40)})
+    # 5 mints
+    contract.whiteListMint(2,{"from":get_account(43)})
+    contract.whiteListMint(1,{"from":get_account(44)})
     contract.whiteListMint(2,{"from":get_account(40)})
 
+    # Exception if exceeding in 1 mint
     with brownie.reverts("dev: Total amount exceeded for white-listed wallet"):
         contract.whiteListMint(1,{"from":get_account(40)})
 
-    contract.addToWhiteList([get_account(44)])
-    contract.whiteListMint(4,{"from":get_account(44)})
+    contract.addToWhiteList([get_account(45)])
+    contract.whiteListMint(2,{"from":get_account(45)})
     with brownie.reverts("dev: Total amount exceeded for white-listed wallet"):
-        contract.whiteListMint(2,{"from":get_account(44)})
-
-    contract.whiteListMint(1,{"from":get_account(44)})
+        contract.whiteListMint(2,{"from":get_account(45)})
+    
+    contract.addToWhiteList([get_account(46)])
+    contract.whiteListMint(2,{"from":get_account(46)})
+    with brownie.reverts("dev: Total amount exceeded for white-listed wallet"):
+        contract.whiteListMint(1,{"from":get_account(46)})
+    
+    contract.addToWhiteList([get_account(47)])
+    contract.whiteListMint(1,{"from":get_account(47)})
 
     with brownie.reverts("dev: Total amount exceeded for white-listed wallet"):
-        contract.whiteListMint(1,{"from":get_account(44)})
+        contract.whiteListMint(2,{"from":get_account(47)})
 
     expectedPartial += 10
+    print(f"expPart #{n}: {expectedPartial}")
+    n+=1
 
+    print(f"supply = {supply} , expPart = {expectedPartial}, contract.tot = {contract.totalSupply()}")
     assert(contract.totalSupply() == supply + expectedPartial)
 
     # Mint the rest in chunks of 50 max (to avoid gas limits)
@@ -290,10 +312,19 @@ def complete_e2e_test(contract,_range_390,_range_24,_range_10,_maxPreSales,_maxD
     assert contract.reservedTHPrize() == Wei("50 ether")        
     exp = Wei(f"{_expected_total_eths} ether") - Wei("9 ether")
     
+    print(f"_expected_total_eths = {_expected_total_eths}")
+    print(f"EXP = {exp}")
+    print(f"last_balance = {last_balance}")
+    print(f"contract.bal() = {contract.balance()}")
+
     # Confirm contract balance
     # expected amount (exp) - 50 ETH from treasure hunt pot - 9 ETH from 1st+2nd prize (4+5)
     assert contract.balance() == last_balance + exp
-    
+
+    # check and release first and second price so expected amounts are the right ones for other test cases
+    first_prize_sent(contract)    
+    second_prize_sent(contract)
+
     # Assign new last_balance for contract
     last_balance = contract.balance()
 
@@ -320,13 +351,9 @@ def complete_e2e_test(contract,_range_390,_range_24,_range_10,_maxPreSales,_maxD
                          accs_vip,
                          mult_vip_expected) 
 
-    # PRIZES     
+    # 3rd PRIZE
     contract.setSecret(0xc400cda91a2ade601f638972b9ff78851ab8e8bef801f0fe79680d215190cca0)
-
-    first_prize_sent(contract)
-
-    second_prize_sent(contract)
-
+    
     # Starting index to register teams
     # starting here first 5 tokens are for account 3, then next 5 for account 4,
     # subsequent accounts are 8 , 9 , 10
@@ -420,14 +447,7 @@ def first_prize_sent(contract,owner_calls=True):
     assert contract.payments(winners[2]) == 0
 
 def second_prize_sent(contract,owner_calls=True):
-    
-    contract.chargeContract({'from': get_account(2), 'value': f"{contract.SECOND_PRIZE_TOTAL_ETH_AMOUNT()}"})
-
-    dummy_winners = []
-
-    # Add payments to 10 random accounts among the 12 particpated
-    contract.sendGiveAway(2,dummy_winners)
-    
+       
     # get the list of winners
     winners = contract.second_prize_winners
 
@@ -503,17 +523,14 @@ def second_prize_sent(contract,owner_calls=True):
     # Check no debt left after withdrawn
     for i in range(0,10):
         accountWin = accounts.at(winners(i),force=True)
-        assert contract.payments(accountWin) == 0    
-
-    with brownie.reverts("dev: 2nd prize already released"):
-        contract.sendGiveAway(2, [])
+        assert contract.payments(accountWin) == 0     
 
 def register_teams(contract,team,params):
     
-    with brownie.reverts("tokens list size exceed maximum to create list"):
+    with brownie.reverts("dev: tokens list size exceed maximum to create list"):
         contract.registerTHTeam("locos", [1,2,3,4,5,6,7,8,9,10,11]) 
 
-    with brownie.reverts("tokens list size exceed maximum to create list"):
+    with brownie.reverts("dev: tokens list size exceed maximum to create list"):
         contract.registerTHTeam("locos", [1,2,3,4,5,6,7,8,9,10]) 
 
     tx = contract.registerTHTeam(team, params[1], { 'from': params[0] }) 
@@ -528,11 +545,14 @@ def register_teams(contract,team,params):
     ret = tx.return_value
     print(f"contract.joinTHTeam #2 = {ret}")
 
+    with brownie.reverts("dev: team name does not exist"):
+        tx = contract.joinTHTeam("non-existing", params[7], { 'from': params[6] }) 
+
     tx = contract.joinTHTeam(team, params[7], { 'from': params[6] }) 
     ret = tx.return_value
     print(f"contract.joinTHTeam #3 = {ret}")
     
-    with brownie.reverts("team name already taken"):
+    with brownie.reverts("dev: team name already taken"):
         contract.registerTHTeam(team, [1,2,3,4,5,6,7,8,9])
 
 def third_prize_sent(contract,not_registred_acct,first_acct,second_acct,owner_calls=True):
@@ -544,7 +564,7 @@ def third_prize_sent(contract,not_registred_acct,first_acct,second_acct,owner_ca
     payingAccBalance = contract.balance() 
     
     # not registered
-    with brownie.reverts("caller not registered in any team"):
+    with brownie.reverts("dev: caller not registered in any team"):
         contract.decryptForTHPrize("lolo",{'from': not_registred_acct}) # get_account(1)
 
     # wrong sentence
@@ -616,12 +636,9 @@ def third_prize_sent(contract,not_registred_acct,first_acct,second_acct,owner_ca
         _acct = accounts.at(_ethAddr)
         assert contract.payments(_acct) == 0
 
-def no_1st_n_2nd_prizes_yet(first_prize_acct_balance, second_prize_acct_balance):
+def no_1st_n_2nd_prizes_yet(first_prize_acct_balance):
     # No changes in 1st prize acct yet
     assert get_account(30).balance() == first_prize_acct_balance 
-
-    # No changes in 2nd prize acct yet
-    assert get_account(31).balance() == second_prize_acct_balance
 
 def set_baseline_4_prizes(contract):
 
@@ -637,17 +654,14 @@ def set_baseline_4_prizes(contract):
     # Account 30 is the 1st prize account
     first_prize_acct_balance = get_account(30).balance()
 
-    # Account 30 is the 1st prize account
-    second_prize_acct_balance = get_account(31).balance()
-
-    return (supply,last_balance,th_balance,first_prize_acct_balance,second_prize_acct_balance)
+    return (supply,last_balance,th_balance,first_prize_acct_balance)
 
 # Assumption is maxdrop has been set to 20
 def pct_at_25(contract,max):
     
     assert contract.getMaxDrop() == max
 
-    (supply, last_balance, th_balance, first_prize_acct_balance, second_prize_acct_balance) = \
+    (supply, last_balance, th_balance, first_prize_acct_balance) = \
         set_baseline_4_prizes(contract)
 
     # Let's confirm no previous supply
@@ -689,7 +703,7 @@ def pct_at_25(contract,max):
     assert contract.reservedTHPrize() == th_balance + Wei("5 ether")        
 
     # no prizes yet
-    no_1st_n_2nd_prizes_yet(first_prize_acct_balance, second_prize_acct_balance)    
+    no_1st_n_2nd_prizes_yet(first_prize_acct_balance)    
     
     # In 25% the contract is still keeping 4 ethers of 1st price until 50% has been achieved
     assert contract.balance() == last_balance + presales_in_contract + pubsales_in_contract
@@ -700,7 +714,7 @@ def pct_at_50(contract,max):
 
     assert contract.getMaxDrop() == max
     
-    (supply, last_balance, th_balance, first_prize_acct_balance, second_prize_acct_balance) = \
+    (supply, last_balance, th_balance, first_prize_acct_balance) = \
         set_baseline_4_prizes(contract)
 
     # Let's confirm previous supply is expected 25% (5 of maxDrop of 20)
@@ -718,7 +732,7 @@ def pct_at_50(contract,max):
     assert contract.reservedTHPrize() == Wei("5 ether")
 
     # no prizes yet
-    no_1st_n_2nd_prizes_yet(first_prize_acct_balance, second_prize_acct_balance)
+    no_1st_n_2nd_prizes_yet(first_prize_acct_balance)
 
     # Confirm contract balance
     assert contract.balance() == last_balance + amount_in_wei(price)
@@ -735,10 +749,7 @@ def pct_at_50(contract,max):
 
     # Let's confirm 1st prize is reserved
     assert get_account(30).balance() == first_prize_acct_balance + Wei("4 ether")
-
-    # No changes in 2nd prize acct yet
-    assert get_account(31).balance() == second_prize_acct_balance
-            
+           
     # Confirm contract balance
     assert contract.balance() == last_balance + pubsales_in_contract - Wei("4 ether")
     assert contract.reservedTHPrize() == Wei("15 ether")
@@ -748,7 +759,7 @@ def pct_at_75(contract,max):
     
     assert contract.getMaxDrop() == max
 
-    (supply, last_balance, th_balance, first_prize_acct_balance, second_prize_acct_balance) = \
+    (supply, last_balance, th_balance, first_prize_acct_balance) = \
         set_baseline_4_prizes(contract)
 
     # Let's confirm previous supply is expected 50% (10 of maxDrop of 20)
@@ -764,9 +775,6 @@ def pct_at_75(contract,max):
     # No change in TH yet
     assert contract.reservedTHPrize() == th_balance
     assert contract.reservedTHPrize() == Wei("15 ether")
-
-    # No change in 2nd prize yet
-    assert get_account(31).balance() == second_prize_acct_balance
 
     # Confirm contract balance (30 ether from TH and 9 ether from 1st+2nd prize)
     assert contract.balance() == last_balance + amount_in_wei(price)
@@ -784,16 +792,13 @@ def pct_at_75(contract,max):
     # Let's confirm first prize is reserved
     assert get_account(30).balance() == first_prize_acct_balance
 
-    # Let's confirm first prize is reserved
-    assert get_account(31).balance() == second_prize_acct_balance + Wei("5 ether")
-
     # Confirm contract balance (30 ether from TH and 9 ether from 1st+2nd prize)
     assert contract.balance() == last_balance + pubsales_in_contract - Wei("5 ether")
     assert contract.reservedTHPrize() == Wei("30 ether")
 
 def pct_at_100(contract,max):
 
-    (supply, last_balance, th_balance, first_prize_acct_balance, second_prize_acct_balance) = \
+    (supply, last_balance, th_balance, first_prize_acct_balance) = \
         set_baseline_4_prizes(contract)
 
     # Let's confirm previous supply is expected 75% (15 of maxDrop of 20)
@@ -819,9 +824,6 @@ def pct_at_100(contract,max):
 
     # Let's confirm first prize is reserved
     assert get_account(30).balance() == first_prize_acct_balance
-
-    # Let's confirm first prize is reserved
-    assert get_account(31).balance() == second_prize_acct_balance 
 
     # Let's confirm supply is the expected one (+5 of maxDrop of 20)
     assert contract.totalSupply() == supply + (max/4)

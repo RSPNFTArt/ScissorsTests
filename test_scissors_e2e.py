@@ -32,4 +32,4 @@ def test_e2e_unit_test(contract):
     if network.show_active() not in ["development"] or "fork" in network.show_active():
         pytest.skip("Only for local testing")
     
-    complete_e2e_test(contract,39,15,1,275,1120,25,120,55)
+    complete_e2e_test(contract,39,15,1,275,1120,25,120,69.85)

@@ -114,6 +114,9 @@ def test_withdrawn_eths_in_founder_accounts(contract):
     # mint to 100%
     mint_everything(contract,20)    
 
+    # to avoid collisions of 2nd prize VIP accounts with expected amounts
+    second_prize_sent(contract)
+
     # Get maximum to withdraw based on TH parts released
     max_balance = contract.maxBalanceToWithdraw()
 
@@ -349,14 +352,8 @@ def test_eth_second_give_away_can_pull_transfers(contract):
     
     assert(not contract.inPublicSales())
 
-    finish_presales(contract)
-
-    dummy_winners = []
-    
-    # We cannot send give away yet
-    with brownie.reverts("dev: 75% not achieved yet"):
-        contract.sendGiveAway(2,dummy_winners)
-
+    finish_presales(contract)    
+        
     # we mint 75% (30) among 12 different accounts 
     # more than 10 so we get awarded winners and confirm rest of accounts 
     # keep previous balance whereas awarded ones get their balance incremented
@@ -366,17 +363,25 @@ def test_eth_second_give_away_can_pull_transfers(contract):
     contract.mint(2,{'from': get_account(10), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
     contract.mint(2,{'from': get_account(11), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
     contract.mint(2,{'from': get_account(12), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+
+    assert contract.second_prize_released() == False 
+
     contract.mint(2,{'from': get_account(13), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
     contract.mint(2,{'from': get_account(16), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
     contract.mint(2,{'from': get_account(17), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
     contract.mint(2,{'from': get_account(18), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
     contract.mint(2,{'from': get_account(19), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
     contract.mint(2,{'from': get_account(14), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    
+    assert contract.second_prize_released() == False        
+
     contract.mint(2,{'from': get_account(15), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
     contract.mint(2,{'from': get_account(8), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
     contract.mint(2,{'from': get_account(5), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
     contract.mint(2,{'from': get_account(7), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
     
+    assert contract.second_prize_released() == True
+
     second_prize_sent(contract)
 
 #@pytest.mark.skip(reason="focus")
@@ -387,13 +392,7 @@ def test_eth_second_give_away_cannot_be_pulled_by_non_winners(contract):
     setMaxDrop(contract,40,3)
     
     finish_presales(contract)
-
-    dummy_winners = []
-
-    # We cannot send give away yet
-    with brownie.reverts("dev: 75% not achieved yet"):
-        contract.sendGiveAway(2,dummy_winners)
-
+    
     # we mint 75% (30) among 12 different accounts 
     # more than 10 so we get awarded winners and confirm rest of accounts 
     # keep previous balance whereas awarded ones get their balance incremented
@@ -405,15 +404,20 @@ def test_eth_second_give_away_cannot_be_pulled_by_non_winners(contract):
     contract.mint(2,{'from': get_account(12), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
     contract.mint(2,{'from': get_account(13), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
     contract.mint(2,{'from': get_account(16), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    assert contract.second_prize_released() == False        
+
     contract.mint(2,{'from': get_account(17), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
     contract.mint(2,{'from': get_account(18), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
     contract.mint(2,{'from': get_account(19), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
     contract.mint(2,{'from': get_account(14), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
     contract.mint(2,{'from': get_account(15), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    assert contract.second_prize_released() == False   
+
     contract.mint(2,{'from': get_account(8), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
     contract.mint(2,{'from': get_account(5), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
     contract.mint(2,{'from': get_account(7), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
 
+    assert contract.second_prize_released() == True
     second_prize_sent(contract,False)
 
 
