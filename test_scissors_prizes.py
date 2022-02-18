@@ -12,8 +12,8 @@ from scripts.helpful_scripts import get_account, amount_in_wei
 from scripts.helpful_tests import create_contract,finish_presales,first_prize_sent,\
                     get_founder_balance,second_prize_sent,third_prize_sent,withdrawn_checks,pct_at_25,\
                     pct_at_50, pct_at_75, mint_everything, get_founder_accts, register_teams,\
-                    whitelist, init_presales, setMaxDrop,\
-                    PRESALES_MINT_PRICE,PUBSALES_MINT_PRICE,PRESALES_FLOAT_VAL,PUBSALES_FLOAT_VAL
+                    whitelist, init_presales, setMaxDrop,second_give_away_case,\
+                    PRESALES_FLOAT_VAL,PUBSALES_FLOAT_VAL
 
 # Set the test environment at module level for all tests below
 @pytest.fixture(scope="module", autouse=True)
@@ -33,13 +33,13 @@ def test_th_filled_at_25_pct(contract):
         pytest.skip("Only for local testing")
 
     # define maximum pre-sales of 3 and sales of 8 
-    setMaxDrop(contract,20,4)
+    setMaxDrop(contract,80,4)
 
     # set max per tx limit
-    contract.setMaxSalesNFTAmount(10)
+    contract.setMaxSalesNFTAmount(20)
 
     # mint 5 (up to 25%)
-    pct_at_25(contract,20)
+    pct_at_25(contract,80)
 
 #@pytest.mark.skip(reason="focus")
 def test_th_filled_at_50_pct(contract):
@@ -48,16 +48,16 @@ def test_th_filled_at_50_pct(contract):
         pytest.skip("Only for local testing")
 
     # define maximum pre-sales of 3 and sales of 8 
-    setMaxDrop(contract,20,4)
+    setMaxDrop(contract,80,4)
 
     # set max per tx limit
-    contract.setMaxSalesNFTAmount(10)
+    contract.setMaxSalesNFTAmount(20)
 
     # mint 5 (up to 25%)
-    pct_at_25(contract,20)
+    pct_at_25(contract,80)
 
     # mint 5 (up to 50%)
-    pct_at_50(contract,20)
+    pct_at_50(contract,80)
 
 #@pytest.mark.skip(reason="focus")
 def test_th_filled_at_75_pct(contract):
@@ -65,19 +65,19 @@ def test_th_filled_at_75_pct(contract):
         pytest.skip("Only for local testing")
 
     # define maximum pre-sales of 3 and sales of 8 
-    setMaxDrop(contract,20,4)
+    setMaxDrop(contract,80,4)
 
     # set max per tx limit
-    contract.setMaxSalesNFTAmount(10)
+    contract.setMaxSalesNFTAmount(20)
 
     # mint 5 (up to 25%)
-    pct_at_25(contract,20)
+    pct_at_25(contract,80)
 
     # mint 5 (up to 50%)
-    pct_at_50(contract,20)
+    pct_at_50(contract,80)
 
     # mint 5 (up to 75%)
-    pct_at_75(contract,20)
+    pct_at_75(contract,80)
 
 #@pytest.mark.skip(reason="focus")
 def test_th_filled_at_100_pct(contract):
@@ -85,13 +85,13 @@ def test_th_filled_at_100_pct(contract):
         pytest.skip("Only for local testing")
 
     # define maximum pre-sales of 3 and sales of 8 
-    setMaxDrop(contract,20,4)
+    setMaxDrop(contract,80,4)
 
     # set max per tx limit
-    contract.setMaxSalesNFTAmount(10)
+    contract.setMaxSalesNFTAmount(20)
 
     # mint to 100%
-    mint_everything(contract,20)
+    mint_everything(contract,80)
 
 #@pytest.mark.skip(reason="focus")
 def test_withdrawn_eths_in_founder_accounts(contract):
@@ -106,13 +106,13 @@ def test_withdrawn_eths_in_founder_accounts(contract):
         get_founder_balance(ss,rb,pj,rl,sp,ngo,mk,do)
      
     # define maximum pre-sales of 3 and sales of 8 
-    setMaxDrop(contract,20,4)
+    setMaxDrop(contract,40,4)
 
     # set max per tx limit
     contract.setMaxSalesNFTAmount(10)
 
     # mint to 100%
-    mint_everything(contract,20)    
+    mint_everything(contract,40)    
 
     # to avoid collisions of 2nd prize VIP accounts with expected amounts
     second_prize_sent(contract)
@@ -154,8 +154,8 @@ def test_withdrawn_eths_in_founder_accounts(contract):
     # then withdrawn_checks will use these multipliers to confirm the amounts 
     # actually allocated correspond to the expected amounts
     #
-    accs_vip = [6,5,3,8,9]  
-    mult_vip_expected = [1,1,4,2,2]
+    accs_vip = [6,5,3,8]  
+    mult_vip_expected = [1,1,3,5]
 
     withdrawn_checks(contract,max_balance,vip_tokens,current_balance,previous_balance,
                          accs_vip,
@@ -348,77 +348,15 @@ def test_eth_second_give_away_can_pull_transfers(contract):
     if network.show_active() not in ["development"] or "fork" in network.show_active():
         pytest.skip("Only for local testing")
     
-    setMaxDrop(contract,40,3)
-    
-    assert(not contract.inPublicSales())
+    second_give_away_case(contract)
 
-    finish_presales(contract)    
-        
-    # we mint 75% (30) among 12 different accounts 
-    # more than 10 so we get awarded winners and confirm rest of accounts 
-    # keep previous balance whereas awarded ones get their balance incremented
-    # in contract.SECOND_PRIZE_PER_WALLET_ETH_AMOUNT() each
-    contract.mint(2,{'from': get_account(6), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
-    contract.mint(2,{'from': get_account(9), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
-    contract.mint(2,{'from': get_account(10), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
-    contract.mint(2,{'from': get_account(11), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
-    contract.mint(2,{'from': get_account(12), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
-
-    assert contract.second_prize_released() == False 
-
-    contract.mint(2,{'from': get_account(13), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
-    contract.mint(2,{'from': get_account(16), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
-    contract.mint(2,{'from': get_account(17), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
-    contract.mint(2,{'from': get_account(18), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
-    contract.mint(2,{'from': get_account(19), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
-    contract.mint(2,{'from': get_account(14), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
-    
-    assert contract.second_prize_released() == False        
-
-    contract.mint(2,{'from': get_account(15), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
-    contract.mint(2,{'from': get_account(8), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
-    contract.mint(2,{'from': get_account(5), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
-    contract.mint(2,{'from': get_account(7), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
-    
-    assert contract.second_prize_released() == True
-
-    second_prize_sent(contract)
 
 #@pytest.mark.skip(reason="focus")
 def test_eth_second_give_away_cannot_be_pulled_by_non_winners(contract):
     if network.show_active() not in ["development"] or "fork" in network.show_active():
         pytest.skip("Only for local testing")
 
-    setMaxDrop(contract,40,3)
-    
-    finish_presales(contract)
-    
-    # we mint 75% (30) among 12 different accounts 
-    # more than 10 so we get awarded winners and confirm rest of accounts 
-    # keep previous balance whereas awarded ones get their balance incremented
-    # in contract.SECOND_PRIZE_PER_WALLET_ETH_AMOUNT() each
-    contract.mint(2,{'from': get_account(6), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
-    contract.mint(2,{'from': get_account(9), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
-    contract.mint(2,{'from': get_account(10), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
-    contract.mint(2,{'from': get_account(11), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
-    contract.mint(2,{'from': get_account(12), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
-    contract.mint(2,{'from': get_account(13), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
-    contract.mint(2,{'from': get_account(16), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
-    assert contract.second_prize_released() == False        
-
-    contract.mint(2,{'from': get_account(17), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
-    contract.mint(2,{'from': get_account(18), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
-    contract.mint(2,{'from': get_account(19), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
-    contract.mint(2,{'from': get_account(14), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
-    contract.mint(2,{'from': get_account(15), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
-    assert contract.second_prize_released() == False   
-
-    contract.mint(2,{'from': get_account(8), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
-    contract.mint(2,{'from': get_account(5), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
-    contract.mint(2,{'from': get_account(7), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
-
-    assert contract.second_prize_released() == True
-    second_prize_sent(contract,False)
+    second_give_away_case(contract,False)
 
 
 #@pytest.mark.skip(reason="focus")

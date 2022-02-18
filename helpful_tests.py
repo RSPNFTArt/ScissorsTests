@@ -10,6 +10,8 @@ PUBSALES_FLOAT_VAL = 0.070
 PRESALES_MINT_PRICE = "0.055 ether"
 PUBSALES_MINT_PRICE = "0.070 ether"
 
+SECOND_PRICE_MAX_WINNERS = 20
+
 def create_contract():
     scissor = Scissors.deploy({"from": get_account(0)})    
     scissor.setPrizesAccounts(get_account(30))
@@ -446,6 +448,38 @@ def first_prize_sent(contract,owner_calls=True):
     assert contract.payments(winners[1]) == 0
     assert contract.payments(winners[2]) == 0
 
+def second_give_away_case(contract,owner_calls=True):
+    setMaxDrop(contract,40,3)
+    
+    assert(not contract.inPublicSales())
+    finish_presales(contract)    
+        
+    # we mint 75% (30) among 12 different accounts 
+    # more than 10 so we get awarded winners and confirm rest of accounts 
+    # keep previous balance whereas awarded ones get their balance incremented
+    # in contract.SECOND_PRIZE_PER_WALLET_ETH_AMOUNT() each
+    contract.mint(2,{'from': get_account(6), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(9), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(10), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(11), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(12), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    assert contract.second_prize_released() == False 
+    contract.mint(2,{'from': get_account(13), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(16), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(17), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(18), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(19), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(14), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+        
+    assert contract.second_prize_released() == False        
+    contract.mint(2,{'from': get_account(15), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(8), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(5), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+    contract.mint(2,{'from': get_account(7), 'value': amount_in_wei(PUBSALES_FLOAT_VAL*2)})
+        
+    assert contract.second_prize_released() == True
+    second_prize_sent(contract,owner_calls)
+
 def second_prize_sent(contract,owner_calls=True):
        
     # get the list of winners
@@ -453,7 +487,7 @@ def second_prize_sent(contract,owner_calls=True):
 
     # Check payments for winners are the ones in the second prize
     # >= as same owner may win more than once
-    for i in range(0,10):
+    for i in range(0,SECOND_PRICE_MAX_WINNERS):
         assert contract.payments(winners(i)) >= contract.SECOND_PRIZE_PER_WALLET_ETH_AMOUNT() 
 
     if not owner_calls:
@@ -478,7 +512,7 @@ def second_prize_sent(contract,owner_calls=True):
             
             found=False
 
-            for j in range(0,10):
+            for j in range(0,SECOND_PRICE_MAX_WINNERS):
                 if accounts[i]==winners(j):
                     found = True
                     break                
@@ -491,15 +525,30 @@ def second_prize_sent(contract,owner_calls=True):
 
         #non_winner_acc = get_account(non_winner_index)
         nonWinnerAccBalance = non_winner_acc.balance()
+        acc_processed = []
 
         # check balances prev and post payment withdrawn 
-        for i in range(0,10):
+        for i in range(0,SECOND_PRICE_MAX_WINNERS):            
             accountWin = accounts.at(winners(i),force=True)
+            if(accountWin in acc_processed):
+                continue
+
+            print(f"Account win = {accountWin}")
+
             winner_prev_balance = accountWin.balance()
+            print(f"Balance before withdrawing payments = {winner_prev_balance}")
+
             non_winner_prev_balance = non_winner_acc.balance()
+
             contract.withdrawPayments(accountWin, {'from': non_winner_acc}) 
-            assert accountWin.balance() == winner_prev_balance + contract.SECOND_PRIZE_PER_WALLET_ETH_AMOUNT()
+
+            print(f"accountWin balance AFTER = {accountWin.balance()}")            
+            print(f"2nd prize = {contract.SECOND_PRIZE_PER_WALLET_ETH_AMOUNT()}")
+            print(f"is {accountWin.balance()} >= {winner_prev_balance + contract.SECOND_PRIZE_PER_WALLET_ETH_AMOUNT()} ?")
+            print("---------------")
+            assert accountWin.balance() >= winner_prev_balance + contract.SECOND_PRIZE_PER_WALLET_ETH_AMOUNT()
             assert non_winner_acc.balance() == non_winner_prev_balance
+            acc_processed.append(accountWin)
 
         # balance of non winner account should be the same after withdrawing 
         assert non_winner_acc.balance() == nonWinnerAccBalance
@@ -507,7 +556,7 @@ def second_prize_sent(contract,owner_calls=True):
     else:        
         hwinner = {}
         # check balances prev and post payment withdrawn 
-        for i in range(0,10):
+        for i in range(0,SECOND_PRICE_MAX_WINNERS):
             # get keys
             lh = list(hwinner)
 
@@ -521,7 +570,7 @@ def second_prize_sent(contract,owner_calls=True):
                 assert accountWin.balance() >= (winner_prev_balance + contract.SECOND_PRIZE_PER_WALLET_ETH_AMOUNT())
     
     # Check no debt left after withdrawn
-    for i in range(0,10):
+    for i in range(0,SECOND_PRICE_MAX_WINNERS):
         accountWin = accounts.at(winners(i),force=True)
         assert contract.payments(accountWin) == 0     
 
